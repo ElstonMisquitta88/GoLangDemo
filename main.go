@@ -1,14 +1,134 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"sync"
+
+	_ "github.com/denisenkom/go-mssqldb"
 )
 
+type Todo struct {
+	ID    int
+	Title string
+	Done  bool
+}
+
+func (t *Todo) MarkDone() {
+	t.Done = true
+}
+
+var sqldbconn *sql.DB
+
+type Food struct {
+	Id          int
+	Title       string
+	Description string
+	Price       float64
+}
+
+func sqlconnect() *sql.DB {
+	cfg, err := loadConfig("config.json")
+	cfg.DB.Password = "phoenixuser1"
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	connString := fmt.Sprintf(
+		"server=%s;port=%d;user id=%s;password=%s;database=%s;encrypt=disable",
+		cfg.DB.Server,
+		cfg.DB.Port,
+		cfg.DB.User,
+		cfg.DB.Password,
+		cfg.DB.Database,
+	)
+
+	// Open connection
+	db, err := sql.Open("sqlserver", connString)
+	if err != nil {
+		log.Fatal("Open connection failed:", err.Error())
+	}
+
+	// Ping DB to confirm connection
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("Ping failed:", err.Error())
+	}
+
+	fmt.Println("Connected to SQL Server successfully!")
+	return db
+}
+
+type DBConfig struct {
+	Server   string `json:"server"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Database string `json:"database"`
+}
+
+type AppConfig struct {
+	DB DBConfig `json:"db"`
+}
+
+func loadConfig(path string) (*AppConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg AppConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+func getFoodList() ([]Food, error) {
+	query := `SELECT Id, Title, [Description], Price FROM Food`
+
+	rows, err := sqldbconn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	foods := []Food{} // initialize slice
+
+	for rows.Next() {
+		var f Food
+		err := rows.Scan(&f.Id, &f.Title, &f.Description, &f.Price)
+		if err != nil {
+			return nil, err
+		}
+		foods = append(foods, f)
+	}
+	return foods, rows.Err()
+}
+
 func main() {
+
+	sqldbconn = sqlconnect() // your working function
+	defer sqldbconn.Close()
+
+	allfood, err := getFoodList()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(allfood)
+
+	/*todo := Todo{ID: 1, Title: "Learn Go", Done: false}
+	todo.MarkDone()
+	fmt.Println(todo.Done) // true
+
+	x := 42
+	p := &x // p is a pointer to x
+	fmt.Printf("The value of x is: %d\n", x)
+	fmt.Println("Value of Pointer ", *p)
+	*/
 
 	/* filePath := "D:\\SampleFile\\test.txt" // Replace with your file path
 	content, err := os.ReadFile(filePath)
@@ -18,7 +138,7 @@ func main() {
 	}
 	fmt.Printf("File content:\n%s\n", content) */
 
-	var wg sync.WaitGroup
+	/*var wg sync.WaitGroup
 	wg.Go(func() {
 		say("Processing task")
 		exportfile()
@@ -26,6 +146,7 @@ func main() {
 	})
 	wg.Wait()
 	fmt.Println("All tasks complete")
+	*/
 
 	/* 	fmt.Println("Hello, Go!")
 
